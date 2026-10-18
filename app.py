@@ -1,89 +1,49 @@
+import streamlit as st
 import cv2
 import numpy as np
-import tkinter as tk
-from PIL import Image, ImageTk
+from PIL import Image
 
-# ============ SETUP KAMERA ============
-cap = cv2.VideoCapture(0)  # ganti ke 1 kalau kamera tidak muncul
+# Konfigurasi Halaman
+st.set_page_config(page_title="Color Detective", layout="wide")
+st.title("🎨 Color Detective (Online Version)")
+st.write("Upload a photo of a colored object, then adjust the sliders on the left to detect it!")
 
-# ============ SETUP GUI ============
-root = tk.Tk()
-root.title("Color Detective - Move the Slider!")
-root.geometry("950x620")
-root.configure(bg="#f0f0f0")
+# --- Sidebar for Sliders ---
+st.sidebar.header("Adjust HSV Sliders")
+h_min = st.sidebar.slider("H Min (Color Type)", 0, 180, 100)
+h_max = st.sidebar.slider("H Max (Color Type)", 0, 180, 130)
+s_min = st.sidebar.slider("S Min (Saturation)", 0, 255, 50)
+v_min = st.sidebar.slider("V Min (Brightness)", 0, 255, 50)
 
-# --- Panel kiri: video ---
-video_frame = tk.Frame(root, bg="#f0f0f0")
-video_frame.pack(side=tk.LEFT, padx=15, pady=15)
+# --- Image Upload Area ---
+uploaded_file = st.file_uploader("Choose an image (JPG, PNG)", type=["jpg", "jpeg", "png"])
 
-video_label = tk.Label(video_frame, bg="black")
-video_label.pack()
-
-# --- Panel kanan: slider ---
-ctrl_frame = tk.Frame(root, bg="#f0f0f0")
-ctrl_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=15, pady=15)
-
-tk.Label(ctrl_frame, text="Adjust until\nyour object is detected!",
-         font=("Arial", 14, "bold"), bg="#f0f0f0").pack(pady=(0, 15))
-
-def buat_slider(parent, label, dari, sampai, awal):
-    tk.Label(parent, text=label, font=("Arial", 11, "bold"),
-             bg="#f0f0f0", anchor="w").pack(fill=tk.X, pady=(8, 0))
-    s = tk.Scale(parent, from_=dari, to=sampai, orient=tk.HORIZONTAL,
-                 length=260, bg="#f0f0f0", highlightthickness=0)
-    s.set(awal)
-    s.pack(fill=tk.X)
-    return s
-
-h_min = buat_slider(ctrl_frame, "H Min (Hue)", 0, 180, 100)
-h_max = buat_slider(ctrl_frame, "H Max (Hue)", 0, 180, 130)
-s_min = buat_slider(ctrl_frame, "S Min (Saturation)", 0, 255, 50)
-v_min = buat_slider(ctrl_frame, "V Min (Value)", 0, 255, 50)
-
-# Tombol reset
-def reset_slider():
-    h_min.set(100); h_max.set(130); s_min.set(50); v_min.set(50)
-
-tk.Button(ctrl_frame, text="Reset", command=reset_slider,
-          font=("Arial", 11), bg="#e0e0e0").pack(pady=20)
-
-# ============ LOOP VIDEO ============
-def update_frame():
-    ret, frame = cap.read()
-    if ret:
-        # Konversi ke HSV
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        # Ambil nilai slider
-        lower = np.array([h_min.get(), s_min.get(), v_min.get()])
-        upper = np.array([h_max.get(), 255, 255])
-
-        # Buat mask & hasil
-        mask = cv2.inRange(hsv, lower, upper)
-        result = cv2.bitwise_and(frame, frame, mask=mask)
-
-        # Gabungkan original + hasil (kiri-kanan)
-        combined = np.hstack((frame, result))
-        combined = cv2.resize(combined, (640, 240))
-
-        # Konversi ke format tkinter
-        img = Image.fromarray(cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
-        imgtk = ImageTk.PhotoImage(image=img)
-
-        video_label.imgtk = imgtk
-        video_label.configure(image=imgtk)
-
-    # Ulangi setiap 30ms
-    root.after(30, update_frame)
-
-# ============ TUTUP APLIKASI ============
-def on_close():
-    cap.release()
-    cv2.destroyAllWindows()
-    root.destroy()
-
-root.protocol("WM_DELETE_WINDOW", on_close)
-
-# ============ JALANKAN ============
-update_frame()
-root.mainloop()
+if uploaded_file is not None:
+    # Read image
+    image = Image.open(uploaded_file)
+    img_array = np.array(image)
+    
+    # Convert RGB (PIL) to BGR (OpenCV)
+    img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    
+    # Color detection process
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+    lower = np.array([h_min, s_min, v_min])
+    upper = np.array([h_max, 255, 255])
+    
+    mask = cv2.inRange(hsv, lower, upper)
+    result = cv2.bitwise_and(img_bgr, img_bgr, mask=mask)
+    
+    # Convert back to RGB for web display
+    result_rgb = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+    
+    # Display Images Side by Side
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(image, caption="Original Image", use_column_width=True)
+    with col2:
+        st.image(result_rgb, caption="Detection Result", use_column_width=True)
+        
+    st.success("Adjust the sliders on the left to change the detection result!")
+else:
+    st.info("Please upload an image first.")
